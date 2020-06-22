@@ -1,0 +1,71 @@
+name: Test image as artifact
+
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: API build and test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+
+      - name: Get the version
+        id: vars
+        run: echo ::set-output name=tag::$(echo ${GITHUB_REF:10})
+
+      - name: Test version
+        run: echo ${{steps.vars.outputs.tag}}
+
+      - name: Build the tagged Docker image
+        run: docker build -t test:candidate .
+
+      - name: Save image
+        run: docker save test:candidate -o image
+
+      - name: Upload image as artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: image-candidate
+          path: ./image
+
+  test_image:
+    needs: build
+    runs-on: ubuntu-latest
+    name: Run tests using the new image
+
+    steps:
+      - uses: actions/download-artifact@v2
+        name: Download image artifact
+        with:
+          name: image-candidate
+          path: ./image
+
+      - name: Load image
+        run: |
+          cd image
+          ls
+          docker load --input image
+
+      - name: Run tests
+        run: docker run test:candidate npm run tests
+
+  lint_image:
+    needs: build
+    runs-on: ubuntu-latest
+    name: Run linting using the new image
+
+    steps:
+      - uses: actions/download-artifact@v2
+        name: Download image artifact
+        with:
+          name: image-candidate
+
+      - name: Load image
+        run: |
+          ls
+          docker load --input ./image
+
+      - name: Run tests
+        run: docker run test:candidate npm run lint
